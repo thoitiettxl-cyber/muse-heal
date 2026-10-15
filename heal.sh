@@ -449,9 +449,10 @@ else
   fi
 fi
 
-# 12. skills — content is not regenerable; missing = FAIL for a human.
+# 12. skills — canonical location is ~/workspace/custom-skills/ (the standard
+# path muse.skill_search indexes). Content is not regenerable; missing = FAIL.
 for s in api-design cli-creator codemode commit github librarian mcp-builder mcp-client summarize tmux update-changelog uv heal; do
-  if [ -f "$HOME_DIR/workspace/skills/$s/SKILL.md" ]; then
+  if [ -f "$HOME_DIR/workspace/custom-skills/$s/SKILL.md" ]; then
     report_ok "skill:$s"
   else
     report_failed "skill:$s: SKILL.md missing (restore manually)"
