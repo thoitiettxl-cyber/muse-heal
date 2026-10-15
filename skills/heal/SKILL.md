@@ -55,8 +55,10 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
    missing = FAIL (re-run the OAuth flow manually).
 10. **codemode-store** — `~/.config/codemode/store.json` exists; created as `{}`
     mode 600 if missing (HEALED).
-11. **hooks** — the `# >>> heal` block exists in both `~/.bashrc` and
-    `~/.profile`. Repair: re-append (grep-guarded).
+11. **hooks** — the versioned `# >>> heal v2` block exists in both `~/.bashrc`
+    and `~/.profile`. Repair: install it; a pre-v2 `# >>> heal` block is
+    replaced (old text backed up once to `<rc>.heal.bak`), so hook changes
+    reach already-installed VMs. Idempotent.
 12. **skill:\*** — each expected skill dir has `SKILL.md`
     (api-design cli-creator codemode commit github librarian mcp-builder
     mcp-client summarize tmux update-changelog uv heal). Missing = FAIL
@@ -74,8 +76,12 @@ On new shells (throttled to one auto-run per 5 minutes via
 `~/.config/heal/last-auto`) it launches `HEAL_QUIET=1 heal.sh fix login`
 **in the background**, output appended to the log. Logins stay instant and
 silent when healthy; any repair or failure is visible via `heal status` /
-`heal log`. Heal check #11 verifies both hooks exist and reinstalls them —
-the registration itself is self-healing.
+`heal log`. Heal check #11 verifies both hooks are the current version and
+(re)installs them — the registration itself is self-healing. The same hook
+also runs `heal-agents --alert ~/.config/heal/agents-alert.json` in the
+background (same 5-minute throttle). `--alert` ALWAYS rewrites that file and
+exits 0, whatever the detector found (orphaned / clean / malformed / detector
+crashed -> `{"error":...}`); `summary.checked_at` says how fresh it is.
 
 ## Limits (be honest about these)
 - Cannot restore anything outside `$HOME` — the base image owns that.
@@ -95,7 +101,9 @@ accident. It is read-only: running it never changes anything.
 
 ## Session-start convention (for Muse)
 At the start of a session — and whenever the user reports an interruption —
-run `heal-agents` BEFORE other work. If it reports orphaned/stale tasks,
+read `~/.config/heal/agents-alert.json` (written by the login hook; check
+`summary.orphaned`, `summary.stale`, `summary.bad_lines`, an `error` key, and
+that `summary.checked_at` is recent) and/or run `heal-agents` BEFORE other work. If it reports orphaned/stale tasks,
 follow the resume protocol below. Do not silently re-do work the journal shows
 as already done.
 
@@ -132,6 +140,22 @@ jlog show  --id ID          # full history of one task
 ```
 Env override for tests: `JOURNAL_FILE=/path/to/journal.jsonl`.
 
+## jrun — automatic journaling for long commands
+For a single long non-interactive command (decompile, download, build) don't
+rely on remembering `jlog`: wrap it.
+```
+jrun [--beat N] [--label TEXT] -- <command> [args...]    # e.g. jrun --label "jadx app.apk" -- jadx -d out app.apk
+```
+- Writes `start`, a heartbeat every N s (default 60, min 10) **only while jrun
+  itself is alive**, and exactly one terminal entry: `done` (exit 0) or `fail`
+  (non-zero exit, or killed by INT/TERM/HUP -> exit 130/143/129; the child is
+  sent TERM, then KILL after 5 s). Exit code and stdin are passed through.
+- **Only the command name (or `--label`) is journaled, never the arguments** —
+  they may carry tokens. Don't put secrets in `--label`.
+- `kill -9` on jrun cannot be trapped: no terminal entry, but the heartbeat
+  stops with it, so `heal-agents` shows the task as stale/orphaned (the
+  command itself may keep running as an orphan — check `workdir`).
+
 ## What the worker's brief MUST require
 Every brief for journaled work must include this convention (copy-paste):
 > Trong lúc làm, ghi tiến độ vào journal sau mỗi milestone (hoặc mỗi vài phút):
@@ -157,7 +181,10 @@ boot time (`uptime -s`) against the task's last heartbeat:
   may have died, or may just be slow/quiet.
 - Anything with `done`/`fail` is ignored (no false positives).
 
-Exit codes: 0 clean, 1 orphaned/stale found, 2 error.
+Exit codes: 0 clean, 1 orphaned/stale found, 2 error or malformed journal
+lines (malformed lines = tasks silently untracked; `--json` reports
+`summary.bad_lines`). `--alert FILE` writes the `--json` report to FILE and
+always exits 0.
 
 ## Resume protocol (human-gated — do NOT auto-resume)
 For each orphaned/stale task, present to Boss:

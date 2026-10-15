@@ -10,7 +10,10 @@
 #
 # Read-only: never modifies the journal, so re-runs are identical.
 #
-# Usage: heal-agents [--json] [--stale-minutes N] [--boot-epoch EPOCH]
+# Usage: heal-agents [--json] [--alert FILE] [--stale-minutes N] [--boot-epoch EPOCH]
+#   --alert FILE writes the --json report to FILE atomically and ALWAYS exits 0
+#   (what the login hook uses: the report is written whether work is orphaned,
+#   clean, or the detector itself failed -> {"error":...}). Read FILE at session start.
 #   --boot-epoch is a test hook (simulates a fresh boot at EPOCH).
 # Exit: 0 = clean, 1 = orphaned/stale found, 2 = usage/runtime error.
 set -u
@@ -20,10 +23,13 @@ JOURNAL="${JOURNAL_FILE:-$HOME_DIR/workspace/agent-journal/journal.jsonl}"
 STALE_MIN=30
 JSON_OUT=0
 BOOT_OVERRIDE=""
+ALERT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) JSON_OUT=1; shift ;;
+    --alert) [ $# -ge 2 ] || { echo "heal-agents: --alert needs a file" >&2; exit 2; }; ALERT="$2"; shift 2 ;;
+    --alert=*) ALERT="${1#--alert=}"; shift ;;
     --stale-minutes) STALE_MIN="$2"; shift 2 ;;
     --stale-minutes=*) STALE_MIN="${1#--stale-minutes=}"; shift ;;
     --boot-epoch) BOOT_OVERRIDE="$2"; shift 2 ;;
@@ -35,6 +41,16 @@ while [ $# -gt 0 ]; do
 done
 
 case "$STALE_MIN" in ''|*[!0-9]*) echo "heal-agents: --stale-minutes must be a number" >&2; exit 2 ;; esac
+
+if [ -n "$ALERT" ]; then
+  mkdir -p "$(dirname "$ALERT")" 2>/dev/null
+  _tmp="$ALERT.tmp.$$"
+  sh "$0" --json --stale-minutes "$STALE_MIN" ${BOOT_OVERRIDE:+--boot-epoch "$BOOT_OVERRIDE"} >"$_tmp" 2>/dev/null
+  _rc=$?
+  [ -s "$_tmp" ] || printf '{"error":"heal-agents failed","rc":%s}\n' "$_rc" >"$_tmp"
+  mv -f "$_tmp" "$ALERT"
+  exit 0
+fi
 
 if [ ! -f "$JOURNAL" ]; then
   if [ "$JSON_OUT" -eq 1 ]; then
@@ -154,7 +170,7 @@ for i in order:
 
 summary = {"tracked": len(order), "terminal": n_terminal, "active": n_active,
            "orphaned": len(orphaned), "stale": len(stale), "bad_lines": bad,
-           "boot_epoch": boot, "boot_simulated": boot_fake}
+           "boot_epoch": boot, "boot_simulated": boot_fake, "checked_at": now}
 
 if want_json:
     print(json.dumps({"orphaned": orphaned, "stale": stale, "summary": summary},

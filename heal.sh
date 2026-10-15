@@ -402,16 +402,33 @@ else
   fi
 fi
 
-# 11. login hooks — the `# >>> heal` block must exist in BOTH ~/.bashrc
+# 11. login hooks — the `# >>> heal v2` block must exist in BOTH ~/.bashrc
 #     (interactive shells) and ~/.profile (login shells; this VM has no
 #     ~/.bash_profile chain, so ~/.bashrc alone never fires on login).
-#     Repair re-appends the block (grep-guarded, idempotent).
+#     Versioned: a pre-v2 `# >>> heal` block is REPLACED (old text backed up
+#     once to <rc>.heal.bak), so hook changes actually reach installed VMs.
+#     Repair is idempotent.
+hook_state() {  # $1 = rc file -> ok | old | missing
+  if grep -q '^# >>> heal v2' "$1" 2>/dev/null; then echo ok
+  elif grep -q '^# >>> heal' "$1" 2>/dev/null; then echo old
+  else echo missing
+  fi
+}
 install_login_hooks() {
   for rc in "$HOME_DIR/.bashrc" "$HOME_DIR/.profile"; do
-    if ! grep -q '# >>> heal' "$rc" 2>/dev/null; then
-      cat >>"$rc" <<'HEAL_HOOK_EOF'
+    st="$(hook_state "$rc")"
+    [ "$st" = "ok" ] && continue
+    if [ "$st" = "old" ]; then
+      [ -f "$rc.heal.bak" ] || cp -p "$rc" "$rc.heal.bak" 2>/dev/null
+      # Rewrite in place (cat >) so the rc file keeps its inode/permissions.
+      if sed '/^# >>> heal/,/^# <<< heal/d' "$rc" >"$rc.heal.tmp" 2>/dev/null; then
+        cat "$rc.heal.tmp" >"$rc"
+      fi
+      rm -f "$rc.heal.tmp"
+    fi
+    cat >>"$rc" <<'HEAL_HOOK_EOF'
 
-# >>> heal: background self-heal on new shells (silent when healthy). Managed by heal.sh — see ~/workspace/logs/heal.log
+# >>> heal v2: background self-heal + orphaned-work alert on new shells (silent when healthy). Managed by heal.sh — see ~/workspace/logs/heal.log
 if [ -x "$HOME/workspace/heal/heal.sh" ]; then
   _heal_now="$(date +%s 2>/dev/null || echo 0)"
   _heal_last="$(cat "$HOME/.config/heal/last-auto" 2>/dev/null || echo 0)"
@@ -419,37 +436,35 @@ if [ -x "$HOME/workspace/heal/heal.sh" ]; then
   if [ "$_heal_now" -ge "$((_heal_last + 300))" ]; then
     echo "$_heal_now" >"$HOME/.config/heal/last-auto" 2>/dev/null
     ( HEAL_QUIET=1 "$HOME/workspace/heal/heal.sh" fix login >>"$HOME/workspace/logs/heal.log" 2>&1 & )
-    # Check for orphaned agent work after a possible VM replace; write an
-    # alert file instead of printing (nobody reads hook output). Throttled
-    # by the same 5-minute window as the heal run above.
-    ( "$HOME/.local/bin/heal-agents" --json >"$HOME/.config/heal/agents-alert.json.tmp" 2>/dev/null && mv "$HOME/.config/heal/agents-alert.json.tmp" "$HOME/.config/heal/agents-alert.json" & )
+    # Orphaned-work alert: --alert always (re)writes ~/.config/heal/agents-alert.json,
+    # whatever heal-agents' exit status (0/1/2). Read it at session start.
+    ( "$HOME/.local/bin/heal-agents" --alert "$HOME/.config/heal/agents-alert.json" >/dev/null 2>&1 & )
   fi
   unset _heal_now _heal_last
 fi
 # <<< heal
 HEAL_HOOK_EOF
-    fi
   done
 }
 
 hooks_ok=1
 for rc in "$HOME_DIR/.bashrc" "$HOME_DIR/.profile"; do
-  grep -q '# >>> heal' "$rc" 2>/dev/null || hooks_ok=0
+  [ "$(hook_state "$rc")" = "ok" ] || hooks_ok=0
 done
 if [ "$hooks_ok" -eq 1 ]; then
   report_ok "hooks:bashrc+profile"
 elif [ "$DRY_RUN" -eq 1 ]; then
-  report_would "hooks: append # >>> heal block"
+  report_would "hooks: install/upgrade # >>> heal v2 block"
 else
   install_login_hooks
   hooks_ok=1
   for rc in "$HOME_DIR/.bashrc" "$HOME_DIR/.profile"; do
-    grep -q '# >>> heal' "$rc" 2>/dev/null || hooks_ok=0
+    [ "$(hook_state "$rc")" = "ok" ] || hooks_ok=0
   done
   if [ "$hooks_ok" -eq 1 ]; then
-    report_healed "hooks: reinstalled"
+    report_healed "hooks: installed/upgraded to v2"
   else
-    report_failed "hooks: reinstall failed"
+    report_failed "hooks: install/upgrade failed"
   fi
 fi
 

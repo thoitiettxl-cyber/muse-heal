@@ -29,10 +29,14 @@ json_escape() {
   # (handles ALL control chars <0x20 as \uXXXX); falls back to sed for the
   # common cases. A raw control char (e.g. ESC from colored output) would
   # otherwise produce invalid JSON and silently lose the journal entry.
+  # ensure_ascii=False keeps Vietnamese etc. readable in the raw journal;
+  # control chars are still \uXXXX-escaped. Bytes are decoded with 'replace'
+  # so invalid UTF-8 can never crash the escaper and blank a field.
   if command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])'
+    printf '%s' "$1" | python3 -c 'import sys,json; s=sys.stdin.buffer.read().decode("utf-8","replace"); sys.stdout.buffer.write(json.dumps(s,ensure_ascii=False)[1:-1].encode("utf-8"))'
   else
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' \
+    # Fallback: drop control chars other than \t \n \r, then escape the rest.
+    printf '%s' "$1" | LC_ALL=C tr -d '\001-\010\013\014\016-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' \
       -e 's/\r//g' -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
   fi
 }

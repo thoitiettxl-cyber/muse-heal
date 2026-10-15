@@ -30,33 +30,8 @@ ln -sfn "$HOME_DIR/workspace/heal/heal-agents.sh" "$HOME_DIR/.local/bin/heal-age
 ln -sfn "$HOME_DIR/workspace/agent-journal/jlog.sh" "$HOME_DIR/.local/bin/jlog"
 ln -sfn "$HOME_DIR/workspace/heal/jrun.sh" "$HOME_DIR/.local/bin/jrun"
 
-# Login-shell hook (background self-heal, silent when healthy, throttled).
-# Installed in BOTH ~/.bashrc (interactive) and ~/.profile (login shells).
-for rc in "$HOME_DIR/.bashrc" "$HOME_DIR/.profile"; do
-  [ -f "$rc" ] || continue
-  if ! grep -q '# >>> heal' "$rc" 2>/dev/null; then
-    cat >>"$rc" <<'HEAL_HOOK_EOF'
-
-# >>> heal: background self-heal on new shells (silent when healthy). Managed by heal.sh — see ~/workspace/logs/heal.log
-if [ -x "$HOME/workspace/heal/heal.sh" ]; then
-  _heal_now="$(date +%s 2>/dev/null || echo 0)"
-  _heal_last="$(cat "$HOME/.config/heal/last-auto" 2>/dev/null || echo 0)"
-  case "$_heal_last" in ''|*[!0-9]*) _heal_last=0 ;; esac
-  if [ "$_heal_now" -ge "$((_heal_last + 300))" ]; then
-    echo "$_heal_now" >"$HOME/.config/heal/last-auto" 2>/dev/null
-    ( HEAL_QUIET=1 "$HOME/workspace/heal/heal.sh" fix login >>"$HOME/workspace/logs/heal.log" 2>&1 & )
-    # Check for orphaned agent work after a possible VM replace; write an
-    # alert file instead of printing (nobody reads hook output). Throttled
-    # by the same 5-minute window as the heal run above.
-    ( "$HOME/.local/bin/heal-agents" --json >"$HOME/.config/heal/agents-alert.json.tmp" 2>/dev/null && mv "$HOME/.config/heal/agents-alert.json.tmp" "$HOME/.config/heal/agents-alert.json" & )
-  fi
-  unset _heal_now _heal_last
-fi
-# <<< heal
-HEAL_HOOK_EOF
-    echo "hook added to $rc"
-  fi
-done
+# Login-shell hook: installed/upgraded by `heal` check #11 (run below) — the hook
+# text lives only in heal.sh, so install.sh can never drift from it again.
 
 # Optional: node reinstall cache (used by heal.sh if base-image node goes missing).
 # Pre-download once: ~/.cache/heal/node-v24.20.0-linux-x64.tar.xz

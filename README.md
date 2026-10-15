@@ -17,6 +17,7 @@ Self-healing toolkit for an AI agent's Linux VM. Two systems, one repo:
 | `heal.sh` | `$HOME` self-heal: 13 idempotent checks + repairs |
 | `heal-agents.sh` | Orphaned-work detector (read-only) |
 | `jlog.sh` | Work-journal helper (`start`/`beat`/`done`/`fail`/`show`) |
+| `jrun.sh` | Wrap a long command: auto `start`, heartbeat while alive, `done`/`fail` on exit or signal; journals the command name only, never its arguments |
 | `install.sh` | Idempotent installer: files, symlinks, login-shell hooks |
 | `skills/heal/SKILL.md` | Agent skill: when to journal, detector usage, resume protocol |
 
@@ -43,7 +44,9 @@ ID=$(jlog start task="build X" brief=briefs/x.md workdir=~/workspace/x | sed 's/
 # ... worker beats: jlog beat --id $ID progress="..."
 # ... then:       jlog done --id $ID summary="..."
 
+jrun --label "jadx app.apk" -- jadx -d out app.apk   # or: auto start/beat/done/fail for one long command
 heal-agents          # list work orphaned by VM replace (or gone stale)
+heal-agents --alert ~/.config/heal/agents-alert.json   # what the login hook runs: always writes the report, exit 0
 heal-agents --json
 ```
 
