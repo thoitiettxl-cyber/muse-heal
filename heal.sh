@@ -502,6 +502,12 @@ if [ "$rea_state" = "ok" ]; then
     else
       report_failed "rea: binary not responding"
     fi
+    rheap="$(timeout 10 bash -lc 'printf "%s" "$REA_JADX_HEAP_MIB"' 2>/dev/null)"
+    if [ -n "$rheap" ]; then
+      report_ok "rea:heap ${rheap}MiB"
+    else
+      report_failed "rea: REA_JADX_HEAP_MIB not set in login shell (large APKs need e.g. 4096; add export to ~/.bashrc and ~/.profile)"
+    fi
   else
     report_failed "rea: java missing (JDK needed for jadx engine; reinstall Temurin JDK to ~/.local/jdk-21)"
   fi
