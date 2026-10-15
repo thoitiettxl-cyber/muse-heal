@@ -2,9 +2,9 @@
 # install.sh — install muse-heal into $HOME. Idempotent: safe to re-run.
 #
 # Installs:
-#   ~/workspace/heal/heal.sh, heal-agents.sh
+#   ~/workspace/heal/heal.sh, heal-agents.sh, jrun.sh
 #   ~/workspace/agent-journal/jlog.sh (+ briefs/)
-#   ~/.local/bin/{heal,heal-agents,jlog} symlinks
+#   ~/.local/bin/{heal,heal-agents,jlog,jrun} symlinks
 #   login-shell hook (# >>> heal) in ~/.bashrc and ~/.profile
 # Then runs `heal` once to verify.
 set -u
@@ -18,7 +18,7 @@ mkdir -p "$HOME_DIR/workspace/heal" \
          "$HOME_DIR/.config/heal" \
          "$HOME_DIR/workspace/logs"
 
-for f in heal.sh heal-agents.sh; do
+for f in heal.sh heal-agents.sh jrun.sh; do
   cp "$REPO/$f" "$HOME_DIR/workspace/heal/$f"
   chmod +x "$HOME_DIR/workspace/heal/$f"
 done
@@ -28,6 +28,7 @@ chmod +x "$HOME_DIR/workspace/agent-journal/jlog.sh"
 ln -sfn "$HOME_DIR/workspace/heal/heal.sh" "$HOME_DIR/.local/bin/heal"
 ln -sfn "$HOME_DIR/workspace/heal/heal-agents.sh" "$HOME_DIR/.local/bin/heal-agents"
 ln -sfn "$HOME_DIR/workspace/agent-journal/jlog.sh" "$HOME_DIR/.local/bin/jlog"
+ln -sfn "$HOME_DIR/workspace/heal/jrun.sh" "$HOME_DIR/.local/bin/jrun"
 
 # Login-shell hook (background self-heal, silent when healthy, throttled).
 # Installed in BOTH ~/.bashrc (interactive) and ~/.profile (login shells).
@@ -44,6 +45,10 @@ if [ -x "$HOME/workspace/heal/heal.sh" ]; then
   if [ "$_heal_now" -ge "$((_heal_last + 300))" ]; then
     echo "$_heal_now" >"$HOME/.config/heal/last-auto" 2>/dev/null
     ( HEAL_QUIET=1 "$HOME/workspace/heal/heal.sh" fix login >>"$HOME/workspace/logs/heal.log" 2>&1 & )
+    # Check for orphaned agent work after a possible VM replace; write an
+    # alert file instead of printing (nobody reads hook output). Throttled
+    # by the same 5-minute window as the heal run above.
+    ( "$HOME/.local/bin/heal-agents" --json >"$HOME/.config/heal/agents-alert.json.tmp" 2>/dev/null && mv "$HOME/.config/heal/agents-alert.json.tmp" "$HOME/.config/heal/agents-alert.json" & )
   fi
   unset _heal_now _heal_last
 fi

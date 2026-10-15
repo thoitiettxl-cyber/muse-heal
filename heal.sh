@@ -419,6 +419,10 @@ if [ -x "$HOME/workspace/heal/heal.sh" ]; then
   if [ "$_heal_now" -ge "$((_heal_last + 300))" ]; then
     echo "$_heal_now" >"$HOME/.config/heal/last-auto" 2>/dev/null
     ( HEAL_QUIET=1 "$HOME/workspace/heal/heal.sh" fix login >>"$HOME/workspace/logs/heal.log" 2>&1 & )
+    # Check for orphaned agent work after a possible VM replace; write an
+    # alert file instead of printing (nobody reads hook output). Throttled
+    # by the same 5-minute window as the heal run above.
+    ( "$HOME/.local/bin/heal-agents" --json >"$HOME/.config/heal/agents-alert.json.tmp" 2>/dev/null && mv "$HOME/.config/heal/agents-alert.json.tmp" "$HOME/.config/heal/agents-alert.json" & )
   fi
   unset _heal_now _heal_last
 fi

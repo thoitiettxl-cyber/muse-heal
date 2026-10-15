@@ -25,9 +25,16 @@ usage() {
 }
 
 json_escape() {
-  # Escape \, ", tab; strip CR; fold newlines to \n. (GNU sed.)
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' \
-    -e 's/\r//g' -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
+  # Escape for JSON string content. Uses python3's json module when available
+  # (handles ALL control chars <0x20 as \uXXXX); falls back to sed for the
+  # common cases. A raw control char (e.g. ESC from colored output) would
+  # otherwise produce invalid JSON and silently lose the journal entry.
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])'
+  else
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' \
+      -e 's/\r//g' -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g'
+  fi
 }
 
 [ $# -ge 1 ] || usage

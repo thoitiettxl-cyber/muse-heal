@@ -14,7 +14,7 @@ Self-healing toolkit for an AI agent's Linux VM. Two systems, one repo:
 
 | Path | Description |
 |------|-------------|
-| `heal.sh` | `$HOME` self-heal: 12 idempotent checks + repairs |
+| `heal.sh` | `$HOME` self-heal: 13 idempotent checks + repairs |
 | `heal-agents.sh` | Orphaned-work detector (read-only) |
 | `jlog.sh` | Work-journal helper (`start`/`beat`/`done`/`fail`/`show`) |
 | `install.sh` | Idempotent installer: files, symlinks, login-shell hooks |

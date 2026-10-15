@@ -177,7 +177,16 @@ else:
     for rec in orphaned + stale:
         show(rec)
     if bad:
-        print(f"  (warning: {bad} malformed journal line(s) skipped)")
+        print(f"  WARNING: {bad} malformed journal line(s) were skipped — "
+              f"those tasks are UNTRACKED and invisible to orphan detection!")
 
-sys.exit(1 if (orphaned or stale) else 0)
+# Exit codes: 0 = clean, 1 = orphaned/stale work found, 2 = malformed lines
+# (tasks may be silently lost). Malformed lines alone are a data-integrity
+# failure even when no orphaned work is detected.
+if orphaned or stale:
+    sys.exit(1)
+elif bad:
+    sys.exit(2)
+else:
+    sys.exit(0)
 PYEOF

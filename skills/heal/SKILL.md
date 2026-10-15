@@ -61,6 +61,10 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
     (api-design cli-creator codemode commit github librarian mcp-builder
     mcp-client summarize tmux update-changelog uv heal). Missing = FAIL
     (content is not regenerable; restore manually).
+13. **rea** — `~/.local/bin/rea` exists and responds, `rea-agents` package
+    present, jadx + apktool engine JARs present, `java` available in a fresh
+    login shell. Missing = FAIL (reinstall via `~/workspace/rea/install.sh`;
+    not auto-repaired — needs network + npm).
 
 ## Permanent registration
 A guarded `# >>> heal` block lives at the end of **both** `~/.bashrc`
