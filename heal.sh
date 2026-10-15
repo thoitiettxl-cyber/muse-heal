@@ -470,13 +470,19 @@ fi
 
 # 12. skills — canonical location is ~/workspace/custom-skills/ (the standard
 # path muse.skill_search indexes). Content is not regenerable; missing = FAIL.
-for s in api-design cli-creator codemode commit github librarian mcp-builder mcp-client summarize tmux update-changelog uv heal; do
+# The heal skill must be a symlink to the repo (never a copy that can drift).
+for s in api-design cli-creator codemode commit github librarian mcp-builder mcp-client summarize tmux update-changelog uv; do
   if [ -f "$HOME_DIR/workspace/custom-skills/$s/SKILL.md" ]; then
     report_ok "skill:$s"
   else
     report_failed "skill:$s: SKILL.md missing (restore manually)"
   fi
 done
+if [ -L "$HOME_DIR/workspace/custom-skills/heal" ] && [ "$(readlink "$HOME_DIR/workspace/custom-skills/heal")" = "$HOME_DIR/workspace/muse-heal/skills/heal" ]; then
+  report_ok "skill:heal (symlink to repo)"
+else
+  report_failed "skill:heal: not a symlink to ~/workspace/muse-heal/skills/heal (run install.sh)"
+fi
 
 # 13. rea — reverse-engineering CLI + MCP server (npm global, prefix ~/.local).
 # Binary + package + engine JARs (jadx, apktool) + java runtime. Not

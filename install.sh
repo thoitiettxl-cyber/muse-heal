@@ -30,6 +30,10 @@ ln -sfn "$HOME_DIR/workspace/heal/heal-agents.sh" "$HOME_DIR/.local/bin/heal-age
 ln -sfn "$HOME_DIR/workspace/agent-journal/jlog.sh" "$HOME_DIR/.local/bin/jlog"
 ln -sfn "$HOME_DIR/workspace/heal/jrun.sh" "$HOME_DIR/.local/bin/jrun"
 
+# Skill: symlink (not copy) so custom-skills/heal can never drift from the repo.
+mkdir -p "$HOME_DIR/workspace/custom-skills"
+ln -sfn "$REPO/skills/heal" "$HOME_DIR/workspace/custom-skills/heal"
+
 # Login-shell hook: installed/upgraded by `heal` check #11 (run below) — the hook
 # text lives only in heal.sh, so install.sh can never drift from it again.
 
