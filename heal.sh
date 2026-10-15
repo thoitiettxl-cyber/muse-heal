@@ -471,7 +471,7 @@ fi
 # 12. skills — canonical location is ~/workspace/custom-skills/ (the standard
 # path muse.skill_search indexes). Content is not regenerable; missing = FAIL.
 # The heal skill must be a symlink to the repo (never a copy that can drift).
-for s in api-design cli-creator codemode commit github librarian mcp-builder mcp-client summarize tmux update-changelog uv; do
+for s in api-design cli-creator codemode commit ghidra github librarian mcp-builder mcp-client summarize tmux update-changelog uv; do
   if [ -f "$HOME_DIR/workspace/custom-skills/$s/SKILL.md" ]; then
     report_ok "skill:$s"
   else

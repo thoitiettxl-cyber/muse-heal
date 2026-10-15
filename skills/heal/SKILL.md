@@ -60,7 +60,7 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
     replaced (old text backed up once to `<rc>.heal.bak`), so hook changes
     reach already-installed VMs. Idempotent.
 12. **skill:\*** — each expected skill dir has `SKILL.md`
-    (api-design cli-creator codemode commit github librarian mcp-builder
+    (api-design cli-creator codemode commit ghidra github librarian mcp-builder
     mcp-client summarize tmux update-changelog uv heal). Missing = FAIL
     (content is not regenerable; restore manually).
 
