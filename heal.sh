@@ -484,39 +484,6 @@ else
   report_failed "skill:heal: not a symlink to ~/workspace/muse-heal/skills/heal (run install.sh)"
 fi
 
-# 13. rea — reverse-engineering CLI + MCP server (npm global, prefix ~/.local).
-# Binary + package + engine JARs (jadx, apktool) + java runtime. Not
-# auto-reinstalled here (needs network + npm); FAIL names the manual fix.
-rbin="$HOME_DIR/.local/bin/rea"
-rea_state="ok"
-[ -x "$rbin" ] || rea_state="no-binary"
-[ -f "$HOME_DIR/.local/lib/node_modules/rea-agents/package.json" ] || rea_state="no-package"
-[ -f "$HOME_DIR/.local/share/rea/jadx-headless-mcp-0.7.1-all.jar" ] || rea_state="no-jadx-jar"
-[ -f "$HOME_DIR/.local/share/rea/apktool_3.0.3.jar" ] || rea_state="no-apktool-jar"
-[ -x "$HOME_DIR/.local/bin/apktool" ] || rea_state="no-apktool-launcher"
-if [ "$rea_state" = "ok" ]; then
-  if timeout 10 bash -lc 'command -v java >/dev/null 2>&1' >/dev/null 2>&1; then
-    rver="$(timeout 10 "$rbin" --version 2>/dev/null | tr -d '[:space:]')"
-    if [ -n "$rver" ]; then
-      report_ok "rea:$rver"
-    else
-      report_failed "rea: binary not responding"
-    fi
-    rheap="$(timeout 10 bash -lc 'printf "%s" "$REA_JADX_HEAP_MIB"' 2>/dev/null)"
-    if [ -n "$rheap" ]; then
-      report_ok "rea:heap ${rheap}MiB"
-    else
-      report_failed "rea: REA_JADX_HEAP_MIB not set in login shell (large APKs need e.g. 4096; add export to ~/.bashrc and ~/.profile)"
-    fi
-  else
-    report_failed "rea: java missing (JDK needed for jadx engine; reinstall Temurin JDK to ~/.local/jdk-21)"
-  fi
-elif [ "$DRY_RUN" -eq 1 ]; then
-  report_would "rea: reinstall via bash ~/workspace/rea/install.sh"
-else
-  report_failed "rea: $rea_state (reinstall: bash ~/workspace/rea/install.sh)"
-fi
-
 # ------------------------------------------------------------------ report
 stamp="$(date '+%F %T %Z')"
 end_ms="$(date +%s%3N)"
