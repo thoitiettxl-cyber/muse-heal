@@ -226,6 +226,20 @@ repair_node_modules() {
 }
 
 # ------------------------------------------------------------------- checks
+# 0. persistent home items (~/.config/gh, ~/.secrets, ~/.local/bin, ~/.gitconfig,
+#    ~/.git-credentials, ~/toolchain, ~/.gradle) — re-link from /workspace/.persist
+#    via restore-home.sh (item list lives there) BEFORE anything needs gh.
+RH="/workspace/.persist/restore-home.sh"
+if [ ! -x "$RH" ]; then
+  report_failed "persist:home: $RH missing"
+elif ! HOME="$HOME_DIR" "$RH" --check >/dev/null 2>&1; then
+  if [ "$DRY_RUN" -eq 1 ]; then report_would "persist:home: run restore-home.sh"
+  elif HOME="$HOME_DIR" "$RH" >/dev/null 2>&1; then report_healed "persist:home: symlinks recreated"
+  else report_failed "persist:home: restore-home.sh failed"; fi
+else
+  report_ok "persist:home"
+fi
+
 # 1. node — base image provides it; repair from under ~ if gone.
 if timeout 10 node --version >/dev/null 2>&1; then
   report_ok "node:$(timeout 10 node --version 2>/dev/null)"

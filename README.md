@@ -32,6 +32,10 @@ This installs `heal`, `heal-agents`, `jlog` into `~/.local/bin`, adds a
 background self-heal hook (silent when healthy) to `~/.bashrc` and `~/.profile`,
 and runs `heal` once to verify.
 
+On boxes whose `$HOME` is recreated on restart, check 0 runs
+`/workspace/.persist/restore-home.sh` (if present) to re-link persisted items
+(gh config, secrets, `~/.local/bin`, git config, toolchain, Gradle) from `/workspace/.persist/home`.
+
 ## Usage
 
 ```bash
