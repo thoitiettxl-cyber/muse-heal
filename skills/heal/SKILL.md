@@ -17,10 +17,10 @@ matched.
 ## When Muse should use it
 - After a VM replace / fresh session: run `heal` once to confirm the
   environment is intact.
-- When `mcp`, `codemode`, or node tooling misbehaves: `heal check` first
+- When node tooling misbehaves: `heal check` first
   (dry run), then `heal` to repair.
 - After changing anything under `~/.local/bin`, `~/.bashrc`, `~/.config`,
-  or the `~/workspace/{mcp,codemode}` projects: `heal` to re-verify.
+  or `~/workspace/heal`: `heal` to re-verify.
 - To inspect health without touching anything: `heal status`, `heal log`.
 
 ## Manual commands
@@ -40,21 +40,12 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
 2. **npm** — must run. Repair: reuse the node tarball (npm ships inside); else FAIL.
 3. **login-path** — a *fresh* `bash -lc` must have `~/.local/bin` in PATH.
    Repair: append `export PATH=...` to `~/.bashrc` (grep-guarded).
-4. **bin:mcp / bin:codemode** — exist, executable, content sanity
-   (`workspace/mcp/bin/mcp.mjs`, `workspace/codemode/cli.mjs`). Repair:
-   regenerate the wrapper from the template embedded in `heal.sh`.
+4, 6–10. **Removed 2026-10-23** — mcp/codemode bins, node_modules,
+   servers.json symlink, API-key exports, tokens.json, codemode store
+   (old-system leftovers, removed on purpose).
 5. **bin:heal** — `~/.local/bin/heal` symlinks to `~/workspace/heal/heal.sh`.
    Repair: recreate the symlink.
-6. **node_modules:mcp / node_modules:codemode** — pinned dep's `package.json`
-   present. Repair: `timeout 240 npm ci` in the project dir.
-7. **symlink:servers.json** — `~/.config/mcp/servers.json` →
-   `~/workspace/mcp/servers.json`. Repair: `ln -sfn` (backs up a real file first).
-8. **env:\*** — the 7 `export *_API_KEY=` lines exist in `~/.bashrc` (names only).
-   Missing = FAIL (a secret value cannot be regenerated; re-add manually).
-9. **tokens.json** — exists and mode 600. Wrong mode = `chmod 600` (HEALED);
-   missing = FAIL (re-run the OAuth flow manually).
-10. **codemode-store** — `~/.config/codemode/store.json` exists; created as `{}`
-    mode 600 if missing (HEALED).
+
 11. **hooks** — the versioned `# >>> heal v2` block exists in both `~/.bashrc`
     and `~/.profile`. Repair: install it; a pre-v2 `# >>> heal` block is
     replaced (old text backed up once to `<rc>.heal.bak`), so hook changes
@@ -63,6 +54,15 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
     (api-design cli-creator codemode commit ghidra github librarian mcp-builder
     mcp-client summarize tmux update-changelog uv heal). Missing = FAIL
     (content is not regenerable; restore manually).
+
+13. **git-gh-auth** — git + gh auth under `$HOME` (`.gitconfig`,
+   `.git-credentials`, `~/.config/gh/`), the guarded secrets block in
+   both `~/.bashrc` and `~/.profile`, and user-space gh in
+   `~/.local/bin`. Credential stores (`.git-credentials`, `hosts.yml`)
+   are checked by existence + mode 600 + host presence only (no value
+   cmp); `.gitconfig` and `config.yml` are compared exactly. Missing =
+   restore from `~/workspace/.secrets` (path reference only, never
+   values).
 
 ## Permanent registration
 A guarded `# >>> heal` block lives at the end of **both** `~/.bashrc`

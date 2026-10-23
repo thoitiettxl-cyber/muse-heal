@@ -105,6 +105,41 @@ $JLOG start task="$(printf 'a\033b\x01c')" >/dev/null 2>&1
 python3 -c "import json; [json.loads(l) for l in open('$JOURNAL_FILE')]" 2>/dev/null \
   && ok "control chars produce valid JSON" || bad "control chars break JSON"
 
+# --- 5. heal.sh git-gh-auth (temp HOME, dummy values only) ---
+echo "--- heal.sh git-gh-auth ---"
+HEAL_SH_DIR=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)
+HEAL_SH="$HEAL_SH_DIR/heal.sh"
+FH="$TDIR/fakehome"
+mkdir -p "$FH/workspace/.secrets" "$FH/.local/bin" "$FH/.config"
+# Dummy .secrets (test-only placeholders, never real credentials).
+printf '[user]\n\tname = dummy\n' > "$FH/workspace/.secrets/.gitconfig"
+printf 'https://dummyuser:dummy-placeholder@github.com\n' > "$FH/workspace/.secrets/.git-credentials"
+printf '# dummy snippet\n' > "$FH/workspace/.secrets/.bashrc"
+printf 'git_protocol: https\n' > "$FH/workspace/.secrets/config.yml"
+printf 'github.com:\n  user: dummyuser\n  oauth_token: dummy-placeholder\n' > "$FH/workspace/.secrets/hosts.yml"
+chmod 700 "$FH/workspace/.secrets"
+chmod 600 "$FH/workspace/.secrets/.gitconfig" "$FH/workspace/.secrets/.git-credentials" "$FH/workspace/.secrets/.bashrc" "$FH/workspace/.secrets/config.yml" "$FH/workspace/.secrets/hosts.yml"
+# Dummy gh (avoids a real download in the test).
+printf '#!/bin/sh\necho "gh version 9.9.9-test"\n' > "$FH/.local/bin/gh"
+chmod +x "$FH/.local/bin/gh"
+# Minimal rc files WITHOUT the secrets block (heal fix must add it).
+printf '# fake bashrc\n' > "$FH/.bashrc"
+printf '# fake profile\n' > "$FH/.profile"
+# 5a. check reports would-heal for git-gh-auth when files are missing.
+if HOME="$FH" sh "$HEAL_SH" check manual 2>/dev/null | grep -q "git-gh-auth"; then
+  ok "git-gh-auth: check reports would-heal when files missing"
+else
+  bad "git-gh-auth: check did not report would-heal"
+fi
+# 5b. fix restores files + block, and does not clobber a differing credential.
+printf 'https://otheruser:other-placeholder@github.com\n' > "$FH/.git-credentials"
+chmod 600 "$FH/.git-credentials"
+HOME="$FH" sh "$HEAL_SH" fix manual >/dev/null 2>&1
+[ -f "$FH/.gitconfig" ] && cmp -s "$FH/workspace/.secrets/.gitconfig" "$FH/.gitconfig" && ok "git-gh-auth: fix restores .gitconfig from .secrets" || bad "git-gh-auth: .gitconfig not restored"
+grep -q 'BEGIN muse-secrets' "$FH/.bashrc" && grep -q 'BEGIN muse-secrets' "$FH/.profile" && ok "git-gh-auth: fix adds block to both rc files" || bad "git-gh-auth: block missing from an rc file"
+grep -q 'otheruser' "$FH/.git-credentials" && ok "git-gh-auth: fix does not clobber a differing credential" || bad "git-gh-auth: differing credential was clobbered"
+[ -f "$FH/.config/gh/hosts.yml" ] && grep -qx 'github.com:' "$FH/.config/gh/hosts.yml" && ok "git-gh-auth: fix restores hosts.yml with github.com" || bad "git-gh-auth: hosts.yml not restored"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]
