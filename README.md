@@ -14,7 +14,7 @@ Self-healing toolkit for an AI agent's Linux VM. Two systems, one repo:
 
 | Path | Description |
 |------|-------------|
-| `heal.sh` | `$HOME` self-heal: 7 idempotent checks + repairs (node/npm, login PATH, heal symlink, login hooks, skills, git/gh auth) |
+| `heal.sh` | `$HOME` self-heal: idempotent checks + repairs (node/npm, login PATH, mcp/codemode bins + node_modules + servers.json + store, tool-env clean-env test, uv, heal symlink, login hooks, skills, git/gh auth) |
 | `heal-agents.sh` | Orphaned-work detector (read-only) |
 | `jlog.sh` | Work-journal helper (`start`/`beat`/`done`/`fail`/`show`) |
 | `jrun.sh` | Wrap a long command: auto `start`, heartbeat while alive, `done`/`fail` on exit or signal; journals the command name only, never its arguments |
@@ -67,7 +67,8 @@ for the full protocol.
 
 ## Limits
 
-- Cannot restore anything outside `$HOME`.
+- Cannot restore anything outside `$HOME`, except the single
+  `/usr/local/bin/gh` symlink, re-applied by heal on every fix run.
 - Cannot regenerate secret values — only detects their absence.
 - Only journaled work can be detected as orphaned.
 - Network-dependent repairs fail closed when offline.

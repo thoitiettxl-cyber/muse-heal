@@ -40,9 +40,37 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
 2. **npm** — must run. Repair: reuse the node tarball (npm ships inside); else FAIL.
 3. **login-path** — a *fresh* `bash -lc` must have `~/.local/bin` in PATH.
    Repair: append `export PATH=...` to `~/.bashrc` (grep-guarded).
-4, 6–10. **Removed 2026-10-23** — mcp/codemode bins, node_modules,
-   servers.json symlink, API-key exports, tokens.json, codemode store
-   (old-system leftovers, removed on purpose).
+4. **bin:mcp / bin:codemode** — `~/.local/bin/mcp` symlinks to
+   `~/workspace/mcp/bin/mcp.mjs` (or a wrapper containing that path), and
+   `~/.local/bin/codemode` symlinks to `~/workspace/codemode/cli.mjs`
+   (or a wrapper containing that path). Repair: recreate the symlink,
+   falling back to a key-loading wrapper if the project file is missing.
+6. **node_modules:mcp / node_modules:codemode** — pinned dep present
+   (`@earendil-works/pi-mcp`, `@earendil-works/pi-codemode`).
+   Repair: `npm ci` in the project dir; project source missing = FAIL.
+7. **symlink:servers.json** — `~/.config/mcp/servers.json` symlinks to
+   `~/workspace/mcp/servers.json`. Repair: relink (a real file is backed
+   up first).
+10. **codemode-store** — `~/.config/codemode/store.json` exists.
+    Repair: create `{}` with mode 600.
+14. **tool-env** — tool shells work with zero rc sourcing: the wrappers
+    in `skills/heal/scripts/` (`mcp`, `codemode`, `uv`, `heal`,
+    `tool-env-check`) are on muse.exec PATH (the runtime adds every
+    skill's `scripts/` dir per-exec), `~/.config/heal/tool-env.sh`
+    loads the 5 API keys (CONTEXT7, EXA, FIRECRAWL, REDIS, TYPESAFE —
+    names only, never values) from `~/workspace/.secrets/.bashrc`, and
+    a clean-env test (`env -i HOME=… PATH=… BASH_ENV=tool-env.sh
+    bash -c …`) finds `mcp`, `codemode`, `uv`, `heal`, gh 2.103, and
+    all 5 keys non-empty. Repair: rewrite tool-env.sh, restore skill
+    wrappers, and create `/usr/local/bin/gh` → `~/.local/bin/gh`.
+    Tokens: `~/.config/mcp/tokens.json` (Cloudflare OAuth) is checked
+    for mode 600 only if it exists; its absence does not fail heal,
+    because it needs an interactive `mcp auth` flow and cannot be
+    regenerated. Old check 8 (7 key exports in `~/.bashrc`, including
+    KSHT/POSTIMAGE) and check 9 (tokens.json required) were removed
+    2026-10-23 and are NOT restored verbatim for those reasons.
+15. **uv** — `~/.local/bin/uv --version` runs. Repair: astral install
+    script (installs `uv` + `uvx` to `~/.local/bin`).
 5. **bin:heal** — `~/.local/bin/heal` symlinks to `~/workspace/heal/heal.sh`.
    Repair: recreate the symlink.
 
@@ -79,10 +107,35 @@ background (same 5-minute throttle). `--alert` ALWAYS rewrites that file and
 exits 0, whatever the detector found (orphaned / clean / malformed / detector
 crashed -> `{"error":...}`); `summary.checked_at` says how fresh it is.
 
+## Tool shells, mechanically (not by a written rule)
+
+muse.exec runs `/bin/bash --norc --noprofile -c …`, so `.bashrc` /
+`.profile` are never sourced in tool shells, and no platform tool-env
+config was found. What actually works, with zero instructions:
+- The runtime adds every loaded skill's `scripts/` dir to tool-shell
+  PATH per-exec (verified with a probe skill). This skill's
+  `scripts/` dir therefore puts `mcp`, `codemode`, `uv`, `heal`, and
+  `tool-env-check` on PATH in tool shells, even though `~/.local/bin`
+  is not on that PATH.
+- Those wrappers load the 5 API keys at invocation time from
+  `~/workspace/.secrets/.bashrc` via `~/.config/heal/tool-env.sh`
+  (code only, never values), so `mcp`/`codemode` see the keys even
+  in `--norc --noprofile` shells. `BASH_ENV=tool-env.sh bash -c …`
+  also loads them (verified).
+- `gh` cannot be shadowed by skill scripts (skill dirs are last in
+  PATH, `/usr/bin/gh` 2.102 wins), so heal also creates the symlink
+  `/usr/local/bin/gh` → `~/.local/bin/gh` (2.103) on every fix run.
+- Residual limit, stated honestly: a raw `bash -c 'echo $EXA_API_KEY'`
+  with no BASH_ENV and no wrapper will still be absent, because the
+  exec runtime does not set BASH_ENV. What is guaranteed is tool
+  invocations via PATH, and `BASH_ENV=tool-env.sh bash -c`.
+
 ## Limits (be honest about these)
-- Cannot restore anything outside `$HOME` — the base image owns that.
+- Cannot restore anything outside `$HOME` — the base image owns that —
+  except the single `/usr/local/bin/gh` symlink above, re-applied by
+  heal on every fix run (symlink only).
 - Cannot regenerate secret values (API keys, OAuth tokens) — only detects absence.
-- Network-dependent repairs (`npm ci`, node download) fail closed when offline.
+- Network-dependent repairs (`npm ci`, node download, uv install) fail closed when offline.
 - Never pushes to any repo.
 
 ---

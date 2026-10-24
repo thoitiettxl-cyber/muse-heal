@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# tool-env-check — report API-key presence, names only, never values.
+# Loads keys via ~/.config/heal/tool-env.sh (or directly from the secrets
+# file as a fallback), then prints one "NAME:present|absent" line per key
+# and exits 0 only if all five are non-empty. Safe to run in any shell.
+if [ -r "$HOME/.config/heal/tool-env.sh" ]; then
+  . "$HOME/.config/heal/tool-env.sh"
+else
+  for _f in "$HOME/workspace/.secrets/.bashrc" "$HOME/.bashrc"; do
+    if [ -r "$_f" ]; then
+      while IFS= read -r _l || [ -n "$_l" ]; do
+        case "$_l" in export\ [A-Za-z_]*=*) eval "$_l" 2>/dev/null || true ;; esac
+      done < "$_f"
+    fi
+  done
+  unset _f _l
+fi
+_all=1
+for _k in CONTEXT7_API_KEY EXA_API_KEY FIRECRAWL_API_KEY REDIS_API_KEY TYPESAFE_API_KEY; do
+  eval "_v=\${$_k:-}"
+  if [ -n "$_v" ]; then echo "$_k:present"; else echo "$_k:absent"; _all=0; fi
+done
+unset _v
+[ "$_all" -eq 1 ]

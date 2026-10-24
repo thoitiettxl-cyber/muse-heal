@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# heal — tool-shell wrapper. On PATH via the heal skill's scripts/ dir.
+# Execs the installed heal.sh by absolute path (never via PATH, to avoid
+# recursing into this wrapper). Works in /bin/bash --norc --noprofile -c.
+if [ -x "$HOME/workspace/heal/heal.sh" ]; then
+  exec "$HOME/workspace/heal/heal.sh" "$@"
+else
+  exec "$HOME/workspace/muse-heal/heal.sh" "$@"
+fi

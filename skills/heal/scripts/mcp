@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# mcp — tool-shell wrapper. On PATH via the heal skill's scripts/ dir
+# (runtime adds every skill's scripts/ dir to muse.exec PATH, per-exec).
+# Loads API keys (names only in code, values never printed) then execs the
+# real MCP client under $HOME. Works in /bin/bash --norc --noprofile -c
+# with zero rc-file sourcing by the caller.
+if [ -r "$HOME/.config/heal/tool-env.sh" ]; then
+  . "$HOME/.config/heal/tool-env.sh"
+else
+  for _f in "$HOME/workspace/.secrets/.bashrc" "$HOME/.bashrc"; do
+    if [ -r "$_f" ]; then
+      while IFS= read -r _l || [ -n "$_l" ]; do
+        case "$_l" in export\ [A-Za-z_]*=*) eval "$_l" 2>/dev/null || true ;; esac
+      done < "$_f"
+    fi
+  done
+  unset _f _l
+fi
+exec node "$HOME/workspace/mcp/bin/mcp.mjs" "$@"
