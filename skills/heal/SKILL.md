@@ -130,6 +130,24 @@ config was found. What actually works, with zero instructions:
   exec runtime does not set BASH_ENV. What is guaranteed is tool
   invocations via PATH, and `BASH_ENV=tool-env.sh bash -c`.
 
+## Hourly runtime cron (the mechanical trigger after a VM replace)
+
+The login-hook registration above never fires in tool shells
+(`--norc --noprofile`), so it alone cannot recreate anything outside
+`$HOME` after a VM replace. The runtime cron `heal-hourly-fix`
+(hourly, interval 1h) closes that gap: its body runs
+`HEAL_QUIET=1 heal fix` in a plain tool shell. Cron definitions live
+in `~/workspace/cron.d/` (inside `$HOME`) and the scheduler lives
+outside the VM, so the job itself survives a replace, and the first
+hourly run after a replace re-applies `/usr/local/bin/gh` and
+anything else heal repairs outside `$HOME`. It reports nothing on a
+clean run (failed=0); it reports only when heal reports failed>0.
+HEARTBEAT.md is deliberately not used for this — the heartbeat
+checklist is user-facing, this job is infra. The cron is not part of
+this repo's code; it is a runtime schedule created once (see the
+cron definition in `~/workspace/cron.d/hourly/`), documented here so
+a future reinstall knows to recreate it.
+
 ## Limits (be honest about these)
 - Cannot restore anything outside `$HOME` — the base image owns that —
   except the single `/usr/local/bin/gh` symlink above, re-applied by

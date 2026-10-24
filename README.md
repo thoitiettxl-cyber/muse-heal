@@ -65,6 +65,17 @@ for the full protocol.
   from `~/.cache/heal/node-v24.20.0-linux-x64.tar.xz` (pre-download, works
   offline) or downloads it.
 
+## Hourly runtime cron (mechanical trigger after a VM replace)
+
+The login-shell hook never fires in agent tool shells (`bash --norc
+--noprofile`), so it alone cannot recreate outside-`$HOME` items after
+a VM replace. The runtime cron `heal-hourly-fix` (hourly) runs
+`HEAL_QUIET=1 heal fix` in a plain tool shell and reports only when
+heal reports failed>0. Its definition lives in `~/workspace/cron.d/`
+(inside `$HOME`) and the scheduler lives outside the VM, so the job
+survives a replace. Recreate it if it is ever deleted; HEARTBEAT.md
+is deliberately not used for this.
+
 ## Limits
 
 - Cannot restore anything outside `$HOME`, except the single
