@@ -179,7 +179,7 @@ Write a journal entry every time you delegate long-running work:
 Short, single-turn tasks don't need journaling.
 
 ```sh
-ID=$(jlog start task="tóm tắt việc" brief="$HOME/workspace/agent-journal/briefs/<slug>.md" workdir="<dir>" [chat="<chat-id>"] | sed 's/JLOG_ID=//')
+ID=$(jlog start task="summarize the work" brief="$HOME/workspace/agent-journal/briefs/<slug>.md" workdir="<dir>" [chat="<chat-id>"] | sed 's/JLOG_ID=//')
 ```
 - `brief` should point at a real file under `~/workspace/agent-journal/briefs/`
   containing the full brief you gave the worker (so a resume can re-read it).
@@ -223,11 +223,11 @@ jrun [--beat N] [--label TEXT] -- <command> [args...]    # e.g. jrun --label "ja
 
 ## What the worker's brief MUST require
 Every brief for journaled work must include this convention (copy-paste):
-> Trong lúc làm, ghi tiến độ vào journal sau mỗi milestone (hoặc mỗi vài phút):
-> `jlog beat --id <ID> progress="<đã xong gì / đang ở đâu>"`.
-> Khi xong: `jlog done --id <ID> summary="<kết quả>"`. Khi lỗi không tiếp tục
-> được: `jlog fail --id <ID> error="<lỗi>"`.
-> Journal mặc định: `~/workspace/agent-journal/journal.jsonl`.
+> While working, record progress in the journal after each milestone (or every few minutes):
+> `jlog beat --id <ID> progress="<what is done / where you are>"`.
+> When done: `jlog done --id <ID> summary="<result>"`. When an error you cannot
+> continue past occurs: `jlog fail --id <ID> error="<error>"`.
+> Default journal: `~/workspace/agent-journal/journal.jsonl`.
 
 Without heartbeats, the detector can only say "started, then silence" — the
 finer the beats, the more precise the resume.
@@ -259,12 +259,12 @@ For each orphaned/stale task, present to Boss:
 3. What likely remains.
 
 Then ask before re-spawning. If Boss approves, spawn with a resume brief:
-> Bạn đang RESUME công việc dở dang (VM replace đã giết agent trước).
-> - Task: <task> — Brief gốc: <đọc file brief>
-> - Tiến độ cuối (journal): <progress> — Workdir: <workdir> (kiểm chứng file trước)
-> - TIẾP TỤC từ chỗ dở, đừng làm lại từ đầu trừ khi file cho thấy cần.
-> - Quy ước journal: `jlog beat --id <ID> progress="..."` mỗi milestone,
->   `jlog done/fail --id <ID>` khi kết thúc. ID=<ID>.
+> You are RESUMING unfinished work (a VM replace killed the previous agent).
+> - Task: <task> — Original brief: <read the brief file>
+> - Last progress (journal): <progress> — Workdir: <workdir> (verify files first)
+> - CONTINUE from where it stopped; don't restart from scratch unless the files show it is needed.
+> - Journal convention: `jlog beat --id <ID> progress="..."` each milestone,
+>   `jlog done/fail --id <ID>` at the end. ID=<ID>.
 
 ## Limits (be honest about these)
 - Only journaled work can be detected. If nobody wrote `start`, the task is

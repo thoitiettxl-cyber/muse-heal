@@ -97,8 +97,8 @@ TASK=$(python3 -c "import json; print(json.loads(open('$JOURNAL_FILE').readline(
 
 export JOURNAL_FILE="$TDIR/utf8.jsonl"
 rm -f "$JOURNAL_FILE"
-$JLOG start task="tóm tắt công việc" >/dev/null 2>&1
-grep -q "tóm tắt" "$JOURNAL_FILE" 2>/dev/null && ok "UTF-8 readable in journal" || bad "UTF-8 escaped"
+$JLOG start task="summary ✓" >/dev/null 2>&1
+grep -q "summary ✓" "$JOURNAL_FILE" 2>/dev/null && ok "UTF-8 readable in journal" || bad "UTF-8 escaped"
 python3 -c "import json; [json.loads(l) for l in open('$JOURNAL_FILE')]" 2>/dev/null \
   && ok "journal lines are valid JSON" || bad "invalid JSON"
 $JLOG start task="$(printf 'a\033b\x01c')" >/dev/null 2>&1
