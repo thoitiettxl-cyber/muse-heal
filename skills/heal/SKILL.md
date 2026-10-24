@@ -54,13 +54,13 @@ HEAL_QUIET=1 heal   # silent when result is OK (what the login hook uses)
 10. **codemode-store** — `~/.config/codemode/store.json` exists.
     Repair: create `{}` with mode 600.
 14. **tool-env** — tool shells work with zero rc sourcing: the wrappers
-    in `skills/heal/scripts/` (`mcp`, `codemode`, `uv`, `heal`,
+    in `skills/heal/scripts/` (`mcp`, `codemode`, `uv`, `uvx`, `heal`,
     `tool-env-check`) are on muse.exec PATH (the runtime adds every
     skill's `scripts/` dir per-exec), `~/.config/heal/tool-env.sh`
     loads the 5 API keys (CONTEXT7, EXA, FIRECRAWL, REDIS, TYPESAFE —
     names only, never values) from `~/workspace/.secrets/.bashrc`, and
     a clean-env test (`env -i HOME=… PATH=… BASH_ENV=tool-env.sh
-    bash -c …`) finds `mcp`, `codemode`, `uv`, `heal`, gh 2.103, and
+    bash -c …`) finds `mcp`, `codemode`, `uv`, `uvx`, `heal`, gh 2.103, and
     all 5 keys non-empty. Repair: rewrite tool-env.sh, restore skill
     wrappers, and create `/usr/local/bin/gh` → `~/.local/bin/gh`.
     Tokens: `~/.config/mcp/tokens.json` (Cloudflare OAuth) is checked
