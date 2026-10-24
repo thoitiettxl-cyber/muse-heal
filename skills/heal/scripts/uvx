@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# uvx — tool-shell wrapper. On PATH via the heal skill's scripts/ dir.
+# The real uvx binary lives in ~/.local/bin (not on muse.exec PATH), so this
+# wrapper execs it by absolute path. Works in /bin/bash --norc --noprofile -c.
+exec "$HOME/.local/bin/uvx" "$@"

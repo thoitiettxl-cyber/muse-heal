@@ -275,12 +275,12 @@ ensure_skill_wrappers() {
   _src="$HOME_DIR/workspace/muse-heal/skills/heal/scripts"
   _dst="$HOME_DIR/workspace/custom-skills/heal/scripts"
   mkdir -p "$_dst" 2>/dev/null
-  for _w in mcp codemode uv heal tool-env-check; do
+  for _w in mcp codemode uv uvx heal tool-env-check; do
     if [ -x "$_dst/$_w" ]; then continue; fi
     if [ -f "$_src/$_w" ]; then cp "$_src/$_w" "$_dst/$_w" 2>/dev/null; chmod +x "$_dst/$_w" 2>/dev/null; fi
   done
   unset _src _dst _w
-  for _w in mcp codemode uv heal tool-env-check; do
+  for _w in mcp codemode uv uvx heal tool-env-check; do
     [ -x "$HOME_DIR/workspace/custom-skills/heal/scripts/$_w" ] || return 1
   done
   return 0
@@ -311,7 +311,7 @@ repair_gh_symlink() {
 # BASH_ENV=tool-env.sh. Prints only key NAMES with present/absent, never values.
 tool_env_clean_ok() {
   _tool_path="/usr/local/bin:/usr/bin:/bin:$HOME_DIR/workspace/custom-skills/heal/scripts"
-  _test='command -v mcp >/dev/null || exit 1; command -v codemode >/dev/null || exit 1; command -v uv >/dev/null || exit 1; command -v heal >/dev/null || exit 1; gh --version 2>/dev/null | head -1 | grep -q "^gh version 2\.103\." || exit 1; for k in CONTEXT7_API_KEY EXA_API_KEY FIRECRAWL_API_KEY REDIS_API_KEY TYPESAFE_API_KEY; do eval "v=\${$k:-}"; [ -n "$v" ] || exit 1; done; exit 0'
+  _test='command -v mcp >/dev/null || exit 1; command -v codemode >/dev/null || exit 1; command -v uv >/dev/null || exit 1; command -v uvx >/dev/null || exit 1; command -v heal >/dev/null || exit 1; gh --version 2>/dev/null | head -1 | grep -q "^gh version 2\.103\." || exit 1; for k in CONTEXT7_API_KEY EXA_API_KEY FIRECRAWL_API_KEY REDIS_API_KEY TYPESAFE_API_KEY; do eval "v=\${$k:-}"; [ -n "$v" ] || exit 1; done; exit 0'
   env -i HOME="$HOME_DIR" PATH="$_tool_path" BASH_ENV="$HOME_DIR/.config/heal/tool-env.sh" bash -c "$_test" >/dev/null 2>&1
 }
 
