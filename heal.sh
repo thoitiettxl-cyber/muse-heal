@@ -23,7 +23,11 @@
 #   - secret VALUES are never printed or logged; only key NAMES are matched
 #
 # What heal deliberately does NOT do:
-#   - restore anything outside $HOME (base image is the source of truth there)
+#   - restore anything outside $HOME (base image is the source of truth there),
+#     except one symlink: /usr/local/bin/gh -> ~/.local/bin/gh, re-applied
+#     by heal on every fix run (symlink only, per the /usr/local/bin rule;
+#     /usr/local/bin is early in muse.exec PATH, so this is the only way
+#     the heal-installed gh 2.103 shadows the system gh 2.102 in tool shells)
 #   - regenerate secret values (API keys, OAuth tokens) — presence is checked,
 #     a missing value is reported as FAIL for a human to fix
 #   - push anything to any repo
@@ -191,18 +195,19 @@ repair_npm() {
 write_mcp_wrapper() {
   cat >"$HOME_DIR/.local/bin/mcp" <<'HEAL_MCP_EOF'
 #!/usr/bin/env bash
-# Permanent system MCP client (registry: ~/.config/mcp/servers.json)
-#
-# Durable env loading: API keys live in ~/.bashrc, but non-interactive shells
-# (cron, exec, login shells without a .bash_profile chain) don't source it.
-# Instead of requiring the caller to `source ~/.bashrc`, apply only the
-# `export VAR=value` lines here — no other .bashrc side effects run.
-if [ -r "$HOME/.bashrc" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      export\ [A-Za-z_]*=*) eval "$line" 2>/dev/null || true ;;
-    esac
-  done < "$HOME/.bashrc"
+# MCP client wrapper (heal-managed). Loads API keys via tool-env.sh
+# (or directly from the secrets file as a fallback), values never printed.
+if [ -r "$HOME/.config/heal/tool-env.sh" ]; then
+  . "$HOME/.config/heal/tool-env.sh"
+else
+  for _f in "$HOME/workspace/.secrets/.bashrc" "$HOME/.bashrc"; do
+    if [ -r "$_f" ]; then
+      while IFS= read -r _l || [ -n "$_l" ]; do
+        case "$_l" in export\ [A-Za-z_]*=*) eval "$_l" 2>/dev/null || true ;; esac
+      done < "$_f"
+    fi
+  done
+  unset _f _l
 fi
 exec node "$HOME/workspace/mcp/bin/mcp.mjs" "$@"
 HEAL_MCP_EOF
@@ -211,10 +216,22 @@ HEAL_MCP_EOF
 
 write_codemode_wrapper() {
   cat >"$HOME_DIR/.local/bin/codemode" <<'HEAL_CODEMODE_EOF'
-#!/usr/bin/node
-// codemode launcher: delegates to the project implementation. Keeps no logic here
-// so updates only touch ~/workspace/codemode/.
-import "/home/hatch/workspace/codemode/cli.mjs";
+#!/usr/bin/env bash
+# Codemode wrapper (heal-managed). Loads API keys via tool-env.sh
+# (or directly from the secrets file as a fallback), values never printed.
+if [ -r "$HOME/.config/heal/tool-env.sh" ]; then
+  . "$HOME/.config/heal/tool-env.sh"
+else
+  for _f in "$HOME/workspace/.secrets/.bashrc" "$HOME/.bashrc"; do
+    if [ -r "$_f" ]; then
+      while IFS= read -r _l || [ -n "$_l" ]; do
+        case "$_l" in export\ [A-Za-z_]*=*) eval "$_l" 2>/dev/null || true ;; esac
+      done < "$_f"
+    fi
+  done
+  unset _f _l
+fi
+exec node "$HOME/workspace/codemode/cli.mjs" "$@"
 HEAL_CODEMODE_EOF
   chmod +x "$HOME_DIR/.local/bin/codemode"
 }
@@ -223,6 +240,79 @@ repair_node_modules() {
   # $1 = project dir. npm ci is the idempotent repair (lockfile -> exact tree).
   proj="$1"
   ( cd "$proj" && timeout 240 npm ci --no-audit --no-fund >>"$LOG" 2>&1 )
+}
+
+# Tool-env loader: code only, never secret values. Heal writes it to
+# ~/.config/heal/tool-env.sh; BASH_ENV set to that file makes a plain
+# bash -c (even --norc --noprofile) load the keys, and skill wrappers
+# source it. The secrets source is ~/workspace/.secrets/.bashrc.
+write_tool_env() {
+  mkdir -p "$HOME_DIR/.config/heal" 2>/dev/null
+  cat >"$HOME_DIR/.config/heal/tool-env.sh" <<'HEAL_TOOLENV_EOF'
+# tool-env.sh — loader for tool shells, NOT a secrets file (code only).
+for _tool_env_file in "$HOME/workspace/.secrets/.bashrc" "$HOME/.bashrc"; do
+  if [ -r "$_tool_env_file" ]; then
+    while IFS= read -r _tool_env_line || [ -n "$_tool_env_line" ]; do
+      case "$_tool_env_line" in
+        export\ [A-Za-z_]*=*) eval "$_tool_env_line" 2>/dev/null || true ;;
+      esac
+    done < "$_tool_env_file"
+  fi
+done
+unset _tool_env_file _tool_env_line
+if [ -d "$HOME/workspace/lemo-opuscar/core/render" ]; then
+  export LEMO_OPUSCAR_HOME="$HOME/workspace/lemo-opuscar"
+fi
+HEAL_TOOLENV_EOF
+  chmod 600 "$HOME_DIR/.config/heal/tool-env.sh" 2>/dev/null
+}
+
+# Skill-scripts wrappers (muse.exec PATH): the repo ships them under
+# skills/heal/scripts/, and custom-skills/heal is a symlink to that dir,
+# so the runtime adds them to tool-shell PATH per-exec. Heal only writes
+# them if missing/non-executable, copying the repo version when available.
+ensure_skill_wrappers() {
+  _src="$HOME_DIR/workspace/muse-heal/skills/heal/scripts"
+  _dst="$HOME_DIR/workspace/custom-skills/heal/scripts"
+  mkdir -p "$_dst" 2>/dev/null
+  for _w in mcp codemode uv heal tool-env-check; do
+    if [ -x "$_dst/$_w" ]; then continue; fi
+    if [ -f "$_src/$_w" ]; then cp "$_src/$_w" "$_dst/$_w" 2>/dev/null; chmod +x "$_dst/$_w" 2>/dev/null; fi
+  done
+  unset _src _dst _w
+  for _w in mcp codemode uv heal tool-env-check; do
+    [ -x "$HOME_DIR/workspace/custom-skills/heal/scripts/$_w" ] || return 1
+  done
+  return 0
+}
+
+repair_uv() {
+  # astral install script: installs uv + uvx to ~/.local/bin by default.
+  [ -x "$HOME_DIR/.local/bin/uv" ] && timeout 10 "$HOME_DIR/.local/bin/uv" --version >/dev/null 2>&1 && return 0
+  command -v curl >/dev/null 2>&1 || return 1
+  ( timeout 240 curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh >>"$LOG" 2>&1 )
+  [ -x "$HOME_DIR/.local/bin/uv" ] && timeout 10 "$HOME_DIR/.local/bin/uv" --version >/dev/null 2>&1
+}
+
+repair_gh_symlink() {
+  # Only if the user-space gh is the heal-installed 2.103, and
+  # /usr/local/bin is writable and does not already point elsewhere.
+  [ -x "$HOME_DIR/.local/bin/gh" ] || return 1
+  timeout 10 "$HOME_DIR/.local/bin/gh" --version 2>/dev/null | grep -q '^gh version 2\.103\.' || return 1
+  if [ -L /usr/local/bin/gh ]; then
+    [ "$(readlink /usr/local/bin/gh)" = "$HOME_DIR/.local/bin/gh" ] && return 0 || return 1
+  fi
+  [ -e /usr/local/bin/gh ] && return 1
+  ln -sfn "$HOME_DIR/.local/bin/gh" /usr/local/bin/gh 2>/dev/null
+  [ -L /usr/local/bin/gh ] && [ "$(readlink /usr/local/bin/gh)" = "$HOME_DIR/.local/bin/gh" ]
+}
+
+# Clean-env tool test: simulates muse.exec (bash -c, no rc files) plus
+# BASH_ENV=tool-env.sh. Prints only key NAMES with present/absent, never values.
+tool_env_clean_ok() {
+  _tool_path="/usr/local/bin:/usr/bin:/bin:$HOME_DIR/workspace/custom-skills/heal/scripts"
+  _test='command -v mcp >/dev/null || exit 1; command -v codemode >/dev/null || exit 1; command -v uv >/dev/null || exit 1; command -v heal >/dev/null || exit 1; gh --version 2>/dev/null | head -1 | grep -q "^gh version 2\.103\." || exit 1; for k in CONTEXT7_API_KEY EXA_API_KEY FIRECRAWL_API_KEY REDIS_API_KEY TYPESAFE_API_KEY; do eval "v=\${$k:-}"; [ -n "$v" ] || exit 1; done; exit 0'
+  env -i HOME="$HOME_DIR" PATH="$_tool_path" BASH_ENV="$HOME_DIR/.config/heal/tool-env.sh" bash -c "$_test" >/dev/null 2>&1
 }
 
 # ------------------------------------------------------------------- checks
@@ -282,8 +372,172 @@ else
   fi
 fi
 
-# 4,6-10 removed on this VM (old-system leftovers): mcp/codemode projects, their
-# bins/node_modules/servers.json/store, 7 API-key exports and tokens.json do not exist here.
+# 4. CLI binaries in ~/.local/bin (symlink to the project, or a wrapper
+# containing the project path — both are accepted; the old wrapper-only
+# check rejected the repo install method, which uses symlinks).
+for b in mcp codemode; do
+  bin="$HOME_DIR/.local/bin/$b"
+  sane=0
+  if [ -L "$bin" ]; then
+    case "$b" in
+      mcp) [ "$(readlink "$bin")" = "$HOME_DIR/workspace/mcp/bin/mcp.mjs" ] && sane=1 ;;
+      codemode) [ "$(readlink "$bin")" = "$HOME_DIR/workspace/codemode/cli.mjs" ] && sane=1 ;;
+    esac
+  elif [ -x "$bin" ]; then
+    case "$b" in
+      mcp) grep -q 'workspace/mcp/bin/mcp.mjs' "$bin" 2>/dev/null && sane=1 ;;
+      codemode) grep -q 'workspace/codemode/cli.mjs' "$bin" 2>/dev/null && sane=1 ;;
+    esac
+  fi
+  if [ "$sane" -eq 1 ]; then
+    report_ok "bin:$b"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    report_would "bin:$b: recreate symlink/wrapper"
+  else
+    case "$b" in
+      mcp) ln -sfn "$HOME_DIR/workspace/mcp/bin/mcp.mjs" "$bin" 2>/dev/null ;;
+      codemode) ln -sfn "$HOME_DIR/workspace/codemode/cli.mjs" "$bin" 2>/dev/null ;;
+    esac
+    # Fall back to the key-loading wrapper if the project file is missing.
+    if [ ! -e "$bin" ]; then
+      case "$b" in
+        mcp) write_mcp_wrapper ;;
+        codemode) write_codemode_wrapper ;;
+      esac
+    fi
+    # Re-evaluate after repair.
+    sane=0
+    if [ -L "$bin" ]; then
+      case "$b" in
+        mcp) [ "$(readlink "$bin")" = "$HOME_DIR/workspace/mcp/bin/mcp.mjs" ] && sane=1 ;;
+        codemode) [ "$(readlink "$bin")" = "$HOME_DIR/workspace/codemode/cli.mjs" ] && sane=1 ;;
+      esac
+    elif [ -x "$bin" ]; then
+      case "$b" in
+        mcp) grep -q 'workspace/mcp/bin/mcp.mjs' "$bin" 2>/dev/null && sane=1 ;;
+        codemode) grep -q 'workspace/codemode/cli.mjs' "$bin" 2>/dev/null && sane=1 ;;
+      esac
+    fi
+    if [ "$sane" -eq 1 ]; then report_healed "bin:$b: recreated"; else report_failed "bin:$b: recreate failed"; fi
+  fi
+done
+
+# 6. node_modules for mcp + codemode (pinned dep present = tree intact).
+npm_ok=0
+timeout 10 npm --version >/dev/null 2>&1 && npm_ok=1
+for proj in mcp codemode; do
+  case "$proj" in
+    mcp) dep="@earendil-works/pi-mcp" ;;
+    codemode) dep="@earendil-works/pi-codemode" ;;
+  esac
+  pdir="$HOME_DIR/workspace/$proj"
+  if [ -f "$pdir/package.json" ] && [ -f "$pdir/node_modules/$dep/package.json" ]; then
+    report_ok "node_modules:$proj"
+  elif [ ! -f "$pdir/package.json" ] || [ ! -f "$pdir/package-lock.json" ]; then
+    report_failed "node_modules:$proj: project source missing (cannot npm ci)"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    report_would "node_modules:$proj: npm ci"
+  elif [ "$npm_ok" -eq 0 ]; then
+    report_failed "node_modules:$proj: npm unavailable, cannot reinstall"
+  else
+    if repair_node_modules "$pdir" && [ -f "$pdir/node_modules/$dep/package.json" ]; then
+      report_healed "node_modules:$proj: npm ci"
+    else
+      report_failed "node_modules:$proj: npm ci failed"
+    fi
+  fi
+done
+
+# 7. servers.json symlink -> the registry under ~/workspace.
+link="$HOME_DIR/.config/mcp/servers.json"
+target="$HOME_DIR/workspace/mcp/servers.json"
+if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+  report_ok "symlink:servers.json"
+elif [ "$DRY_RUN" -eq 1 ]; then
+  report_would "symlink:servers.json: ln -sfn"
+else
+  mkdir -p "$HOME_DIR/.config/mcp"
+  if [ -e "$link" ] && [ ! -L "$link" ]; then
+    mv "$link" "$link.heal-bak-$(date +%s)"
+  fi
+  ln -sfn "$target" "$link"
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+    report_healed "symlink:servers.json"
+  else
+    report_failed "symlink:servers.json: relink failed"
+  fi
+fi
+
+# 10. codemode store.json — created lazily by codemode; ensure it exists.
+store="$HOME_DIR/.config/codemode/store.json"
+if [ -f "$store" ]; then
+  report_ok "codemode-store"
+elif [ "$DRY_RUN" -eq 1 ]; then
+  report_would "codemode-store: create {}"
+else
+  mkdir -p "$HOME_DIR/.config/codemode"
+  printf '{}\n' >"$store" && chmod 600 "$store"
+  if [ -f "$store" ]; then
+    report_healed "codemode-store: created"
+  else
+    report_failed "codemode-store: create failed"
+  fi
+fi
+
+# 14. tool-env: skill wrappers + tool-env.sh + clean-env test.
+# Notes, adapted from the old checks 8/9 (not restored verbatim):
+# - Old check 8 required 7 key exports in ~/.bashrc, including KSHT_API_KEY
+#   and POSTIMAGE_API_KEY; keys now live in ~/workspace/.secrets/.bashrc and
+#   are sourced via the muse-secrets block, so the check now tests the
+#   login-shell env by NAME only, via tool-env.sh, never by value.
+# - Old check 9 required ~/.config/mcp/tokens.json (Cloudflare OAuth).
+#   That token cannot be regenerated by heal and needs an interactive
+#   OAuth flow, so it is deliberately NOT a counted check here: if the
+#   file exists, its mode is still checked (600), but its absence does
+#   not fail heal. Cloudflare remains unauthenticated until `mcp auth`.
+if [ -f "$HOME_DIR/.config/mcp/tokens.json" ]; then
+  _tmode="$(stat -c %a "$HOME_DIR/.config/mcp/tokens.json" 2>/dev/null || echo ?)"
+  if [ "$_tmode" = "600" ]; then
+    report_ok "tokens.json:600"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    report_would "tokens.json: chmod 600 (now $_tmode)"
+  else
+    chmod 600 "$HOME_DIR/.config/mcp/tokens.json"
+    if [ "$(stat -c %a "$HOME_DIR/.config/mcp/tokens.json" 2>/dev/null)" = "600" ]; then
+      report_healed "tokens.json: chmod 600"
+    else
+      report_failed "tokens.json: chmod failed"
+    fi
+  fi
+fi
+if tool_env_clean_ok; then
+  report_ok "tool-env: bash -c tools+keys+gh2.103"
+elif [ "$DRY_RUN" -eq 1 ]; then
+  report_would "tool-env: repair wrappers/tool-env/gh-symlink"
+else
+  write_tool_env
+  ensure_skill_wrappers
+  repair_gh_symlink
+  if tool_env_clean_ok; then
+    report_healed "tool-env: repaired"
+  else
+    report_failed "tool-env: clean-env test still fails (tools, keys, or gh 2.103)"
+  fi
+fi
+
+# 15. uv — ~/.local/bin/uv must run (summarize/uvx markitdown depend on it).
+if timeout 10 "$HOME_DIR/.local/bin/uv" --version >/dev/null 2>&1; then
+  report_ok "uv:$($HOME_DIR/.local/bin/uv --version 2>/dev/null | awk '{print $2}')"
+elif [ "$DRY_RUN" -eq 1 ]; then
+  report_would "uv: install via astral install script"
+else
+  if repair_uv; then
+    report_healed "uv: installed"
+  else
+    report_failed "uv: install failed"
+  fi
+fi
+
 
 # 11. login hooks — the `# >>> heal v2` block must exist in BOTH ~/.bashrc
 #     (interactive shells) and ~/.profile (login shells; this VM has no
